@@ -151,7 +151,7 @@ export default function MaterialDeposit({ wallet, onTransactionAdded }: Material
             Simula el depósito de materiales reciclables y gana $EC0 al instante
           </CardDescription>
           {/* Overlay de la cámara (consumirá el stream MJPEG del backend) */}
-      <CameraOverlay backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL} />
+      
         </CardHeader>
         <CardContent>
           <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4 mb-6">
