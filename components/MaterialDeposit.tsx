@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Leaf, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatEcoAmount } from '@/lib/wallet-utils';
+import CameraOverlay from './CameraOverlay';
 
 interface MaterialDepositProps {
   wallet: Wallet;
@@ -149,6 +150,8 @@ export default function MaterialDeposit({ wallet, onTransactionAdded }: Material
           <CardDescription className="text-base">
             Simula el depósito de materiales reciclables y gana $EC0 al instante
           </CardDescription>
+          {/* Overlay de la cámara (consumirá el stream MJPEG del backend) */}
+      <CameraOverlay backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL} />
         </CardHeader>
         <CardContent>
           <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4 mb-6">
