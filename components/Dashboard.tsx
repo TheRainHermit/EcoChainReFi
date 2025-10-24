@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase, type Wallet, type EcoTransaction } from '@/lib/supabase';
-import { formatEcoAmount } from '@/lib/wallet-utils';
+import { formatEcoAmount, generateQRCode } from '@/lib/wallet-utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Leaf, TrendingUp, Award, QrCode, Wallet as WalletIcon, Sparkles } from 'lucide-react';
@@ -10,16 +10,34 @@ import WalletQR from './WalletQR';
 import MaterialDeposit from './MaterialDeposit';
 import RewardsMarketplace from './RewardsMarketplace';
 import TransactionHistory from './TransactionHistory';
+import Web3EcoCoin from './Web3EcoCoin';
+import { ethers } from 'ethers';
+import { useAccount, useDisconnect } from 'wagmi';
+
+const ecoCoinAbi = [
+  "function balanceOf(address account) view returns (uint256)"
+];
+const ecoCoinAddress = process.env.ECOCOIN_CONTRACT_ADDRESS || "0x256492d87947589e589FE58805AC1D36E5488b07";
+
+const TARGET_CHAIN_ID = 8453; // Base Mainnet. Cambia si usas otra red.
+const TARGET_NETWORK_NAME = "Base Mainnet";
 
 interface DashboardProps {
   wallet: Wallet;
+  onDisconnect: () => void;
 }
 
-export default function Dashboard({ wallet }: DashboardProps) {
+export default function Dashboard({ wallet, onDisconnect }: DashboardProps) {
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<EcoTransaction[]>([]);
   const [totalImpact, setTotalImpact] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [realBalance, setRealBalance] = useState<string>('0');
+  const [networkOk, setNetworkOk] = useState(true);
+
+  // Wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
 
   useEffect(() => {
     loadWalletData();
@@ -70,6 +88,63 @@ export default function Dashboard({ wallet }: DashboardProps) {
     loadWalletData();
   };
 
+  // Función para obtener el balance real de la blockchain y chequear red
+  const fetchRealEcoBalance = async () => {
+    try {
+      console.log("Consultando saldo para:", address || wallet.wallet_address);
+      if (!window.ethereum) {
+        console.error("No se detecta window.ethereum");
+        return;
+      }
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      // Normaliza el tipo de chainId
+      const chainId = typeof network.chainId === 'bigint' ? Number(network.chainId) : network.chainId;
+      if (chainId !== TARGET_CHAIN_ID) {
+        setNetworkOk(false);
+        setRealBalance('0');
+        console.warn("Red incorrecta:", chainId);
+        return;
+      } else {
+        setNetworkOk(true);
+      }
+      const contract = new ethers.Contract(ecoCoinAddress, ecoCoinAbi, provider);
+      console.log("Consultando balanceOf en contrato:", ecoCoinAddress);
+      let balance;
+      try {
+        balance = await contract.balanceOf(address || wallet.wallet_address);
+        console.log("Saldo obtenido:", ethers.formatUnits(balance, 18));
+        setRealBalance(ethers.formatUnits(balance, 18));
+      } catch (err) {
+        console.error("Error en balanceOf:", err);
+      }
+    } catch (error) {
+      console.error('Error general en fetchRealEcoBalance:', error);
+    }
+  };
+
+  useEffect(() => {
+      fetchRealEcoBalance();
+  }, [address, wallet.wallet_address]);
+
+  useEffect(() => {
+    // Si el wallet no tiene qr_code, lo generamos y actualizamos en Supabase
+    async function ensureQRCode() {
+      if (!wallet.qr_code && wallet.wallet_address) {
+        const qr_code = await generateQRCode(wallet.wallet_address);
+        await supabase
+          .from('wallets')
+          .update({ qr_code })
+          .eq('id', wallet.id);
+        // Opcional: recarga el wallet desde Supabase
+        // Puedes pedirle al padre que recargue el wallet, o hacerlo aquí si tienes el método
+      }
+    }
+    ensureQRCode();
+  }, [wallet.qr_code, wallet.wallet_address, wallet.id]);
+
+  console.log("Wallet recibido en Dashboard:", wallet);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMxMGI5ODEiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDE2djhoLThWMTZoOHptLTE2IDB2OEg4VjE2aDEyek0zNiAzNnY4aC04di04aDh6bS0xNiAwdjhoLTh2LThoOHoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-40"></div>
@@ -89,7 +164,21 @@ export default function Dashboard({ wallet }: DashboardProps) {
               </div>
               <div className="flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full">
                 <WalletIcon className="w-4 h-4" />
-                <span className="text-sm font-mono">{wallet.wallet_address.slice(0, 6)}...{wallet.wallet_address.slice(-4)}</span>
+                <span className="text-sm font-mono">
+                  {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'No conectada'}
+                </span>
+                {isConnected && (
+                  <button
+                    onClick={() => {
+                      disconnect();
+                      onDisconnect();
+                    }}
+                    className="ml-2 px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                    title="Desconectar wallet"
+                  >
+                    Desconectar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -98,7 +187,7 @@ export default function Dashboard({ wallet }: DashboardProps) {
                 <CardHeader className="pb-3">
                   <CardDescription className="text-gray-600">Balance Total</CardDescription>
                   <CardTitle className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
-                    {formatEcoAmount(balance)} $EC0
+                    {realBalance} $EC0
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -143,6 +232,41 @@ export default function Dashboard({ wallet }: DashboardProps) {
         </div>
 
         <div className="container mx-auto px-4 py-8">
+          {!networkOk && (
+            <div className="mb-6 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg text-center">
+              Por favor, conecta tu wallet a <b>{TARGET_NETWORK_NAME}</b> para ver tu saldo real de $EC0.
+              <br />
+              <button
+                onClick={async () => {
+                  if (window.ethereum) {
+                    try {
+                      await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x2105' }], // 8453 en hexadecimal
+                      });
+                    } catch (switchError) {
+                      // Si la red no está agregada, solicita agregarla
+                      if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                          method: 'wallet_addEthereumChain',
+                          params: [{
+                            chainId: '0x2105',
+                            chainName: 'Base Mainnet',
+                            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                            rpcUrls: ['https://mainnet.base.org'],
+                            blockExplorerUrls: ['https://basescan.org'],
+                          }],
+                        });
+                      }
+                    }
+                  }
+                }}
+                className="mt-3 px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Cambiar a Base Mainnet
+              </button>
+            </div>
+          )}
           <Tabs defaultValue="deposit" className="space-y-6">
             <TabsList className="grid w-full grid-cols-4 h-14 bg-white shadow-lg rounded-xl p-1">
               <TabsTrigger value="deposit" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white rounded-lg">
@@ -165,6 +289,15 @@ export default function Dashboard({ wallet }: DashboardProps) {
 
             <TabsContent value="deposit">
               <MaterialDeposit wallet={wallet} onTransactionAdded={handleTransactionAdded} />
+              {/* Botón para enviar EC0 por el último depósito */}
+              <div className="mt-6">
+                {transactions.length > 0 && (
+                  <Web3EcoCoin
+                    recipient={wallet.wallet_address}
+                    amount={transactions[0].eco_amount} // Monto del último depósito
+                  />
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="qr">

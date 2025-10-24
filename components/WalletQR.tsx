@@ -39,13 +39,23 @@ export default function WalletQR({ wallet }: WalletQRProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center">
-          <div className="bg-white p-6 rounded-2xl shadow-lg border-4 border-emerald-500">
-            <img
-              src={wallet.qr_code}
-              alt="Wallet QR Code"
-              className="w-72 h-72"
-            />
-          </div>
+          {!wallet.qr_code ? (
+            <div className="bg-white p-6 rounded-2xl shadow-lg border-4 border-emerald-500">
+              <img
+                src={wallet.qr_code}
+                alt="Wallet QR Code"
+                className="w-72 h-72"
+              />
+            </div>
+          ) : (
+            <div className="bg-white p-6 rounded-2xl shadow-lg border-4 border-emerald-500">
+              <img
+                src={wallet.qr_code}
+                alt="Wallet QR Code"
+                className="w-72 h-72"
+              />
+            </div>
+          )}
           <div className="mt-6 text-center">
             <Badge className="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-2 text-sm">
               Listo para escanear
