@@ -246,7 +246,12 @@ export default function Dashboard({ wallet, onDisconnect }: DashboardProps) {
                       });
                     } catch (switchError) {
                       // Si la red no está agregada, solicita agregarla
-                      if (switchError.code === 4902) {
+                      if (
+                        typeof switchError === 'object' &&
+                        switchError !== null &&
+                        'code' in switchError &&
+                        (switchError as { code: number }).code === 4902
+                      ) {
                         await window.ethereum.request({
                           method: 'wallet_addEthereumChain',
                           params: [{
