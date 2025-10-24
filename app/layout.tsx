@@ -18,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={inter.className}>
-        <ContextProvider>{children}</ContextProvider>
+        <ContextProvider cookies={null}>{children}</ContextProvider>
       </body>
     </html>
   )
