@@ -9,7 +9,7 @@ import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
 
 const queryClient = new QueryClient()
 
-const projectId = process.env.NEXT_PUBLIC_PROJECT_ID
+const projectId = process.env.NEXT_PUBLIC_PROJECT_ID || "3b69598adac8ead28c7db2c257101e89";
 
 const metadata = {
   name: 'EcoChain', 
