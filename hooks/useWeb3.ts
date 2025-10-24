@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ethers } from 'ethers';
-import { Web3Modal } from 'web3modal';
+import Web3Modal from 'web3modal';
 
 let web3Modal: Web3Modal | null = null;
 
