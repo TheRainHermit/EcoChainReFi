@@ -1,103 +1,173 @@
-"""Módulo Flask para detección y clasificación de materiales reciclables en tiempo real."""
-
-from flask import Flask, render_template, Response
+from flask import Flask, Response, jsonify, request
+from flask_cors import CORS
 import cv2
+import torch
 from ultralytics import YOLO
-import numpy as np
+from ultralytics.nn.tasks import DetectionModel
+from torch.nn.modules.container import Sequential
+from ultralytics.nn.modules.conv import Conv
+from torch.nn.modules.conv import Conv2d
+from torch.nn.modules.batchnorm import BatchNorm2d
+from torch.nn.modules.activation import SiLU
+from ultralytics.nn.modules.block import C3, C2f
+import threading
+import os
+# from web3 import Web3  # Comentado para demo sin transacciones reales
+import supabase
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Permitir clases necesarias para cargar el modelo YOLO personalizado
+torch.serialization.add_safe_globals([
+    DetectionModel, Sequential, Conv, Conv2d, BatchNorm2d, SiLU, C3, C2f
+])
+
+# Cargar el modelo avanzado
+model = YOLO(r'runs/detect/train/weights/best.pt')
+
+# Inicializar la cámara
+cap = cv2.VideoCapture(0)
 
 app = Flask(__name__)
+CORS(app)
 
-# ✅ RUTA CORREGIDA - usar raw string o forward slashes
-try:
-    model = YOLO(r'runs/detect/train\weights/best.pt')  # Raw string
-except:  # pylint: disable=bare-except
-    try:
-        model = YOLO('runs/detect/train/weights/best.pt')  # Forward slashes
-    except:  # pylint: disable=bare-except
-        # Si no existe el modelo personalizado, usar YOLO preentrenado
-        model = YOLO('yolov8n.pt')
-        print("⚠️  Usando modelo YOLOv8n preentrenado")
+frame_lock = threading.Lock()
+latest_frame = None
+latest_prediction = {"material": None, "confidence": None}
 
-# Mapeo de materiales reciclables
-MATERIALES = {
-    39: 'Botella',
-    # Puedes agregar más clases si tienes un modelo personalizado
+# --- Mapeo de materiales a recompensa ---
+MATERIAL_REWARD = {
+    "Plástico PET": 2.00,
+    "Plástico HDPE": 1.80,
+    "Vidrio": 1.50,
+    "Aluminio": 3.00,
+    "Cartón": 1.00,
+    "Papel": 0.80,
+    "Acero": 2.50,
+    "Tetra Pak": 1.20,
 }
 
+# --- Configuración de Supabase ---
+SUPABASE_URL = "https://itbbjpupkzjinulppsso.supabase.co"
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Usa variable de entorno segura
+supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def gen_frames():
-    """Generador de frames para el streaming de video con detección YOLO."""
-    cap = cv2.VideoCapture(0)  # pylint: disable=no-member
+# --- Configuración de Web3 y contrato EC0 ---
+# NO TENEMOS GAS SUFICIENTE PARA HACER LAS TRANSACCIONES - WE DON'T HAVE ENOUGH GAS TO MAKE THE TRANSACTIONS
+# POR LO TANTO, ESTA SECCIÓN ESTÁ COMENTADA Y SIMULAMOS LAS TRANSACCIONES EN LA RUTA /deposit
+# THEREFORE, THIS SECTION IS COMMENTED OUT AND WE SIMULATE THE TRANSACTIONS ON THE /deposit PATH
+# Si deseas habilitar las transacciones reales, asegúrate de tener fondos suficientes y descomenta esta sección.
+# If you want to enable real transactions, make sure you have sufficient funds and uncomment this section.
+# ------------------------------------------------------------------------------------------------------------
+# WEB3_PROVIDER = "https://mainnet.base.org"
+# ECOCOIN_CONTRACT_ADDRESS = "0x256492d87947589e589FE58805AC1D36E5488b07"
+# ECOCOIN_ABI = [
+#     {
+#         "constant": False,
+#         "inputs": [
+#             {"name": "to", "type": "address"},
+#             {"name": "amount", "type": "uint256"}
+#         ],
+#         "name": "transfer",
+#         "outputs": [{"name": "", "type": "bool"}],
+#         "type": "function"
+#     }
+# ]
+# PRIVATE_KEY = os.getenv("BACKEND_PRIVATE_KEY")  # Usa variable de entorno segura
+# w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
+# ecocoin_contract = w3.eth.contract(address=ECOCOIN_CONTRACT_ADDRESS, abi=ECOCOIN_ABI)
+# backend_wallet = w3.eth.account.from_key(PRIVATE_KEY)
+
+# def send_ec0(to_address, amount):
+#     amount_wei = int(amount * (10 ** 18))
+#     nonce = w3.eth.get_transaction_count(backend_wallet.address)
+#     # Estimar gas
+#     try:
+#         estimated_gas = ecocoin_contract.functions.transfer(to_address, amount_wei).estimate_gas({
+#             "from": backend_wallet.address
+#         })
+#     except Exception as e:
+#         raise Exception(f"Error al estimar gas: {e}")
+#     tx = ecocoin_contract.functions.transfer(to_address, amount_wei).build_transaction({
+#         "from": backend_wallet.address,
+#         "nonce": nonce,
+#         "gas": estimated_gas,
+#         "gasPrice": w3.to_wei("5", "gwei"),
+#     })
+#     signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+#     tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+#     return tx_hash.hex()
+
+def capture_frames():
+    global latest_frame, latest_prediction
     while True:
         success, frame = cap.read()
         if not success:
-            break
-        results = model(frame, stream=True)
-        for r in results:
-            boxes = r.boxes
-            for box in boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cls = int(box.cls[0])
-                conf = float(box.conf[0])
-                label = MATERIALES.get(cls, model.names[cls])
-                material = "Desconocido"
-                if cls == 39:  # Botella
-                    # Recorte de la botella
-                    bottle_roi = frame[y1:y2, x1:x2]
-                    if bottle_roi.size > 0:
-                        # Convertir a HSV para análisis de color
-                        hsv = cv2.cvtColor(bottle_roi, cv2.COLOR_BGR2HSV)  # pylint: disable=no-member
-                        # Calcular histograma de saturación
-                        sat = hsv[:,:,1]
-                        mean_sat = np.mean(sat)
-                        # Heurística simple:
-                        # - Baja saturación: vidrio
-                        # - Alta saturación: plástico
-                        # - Muy oscuro: metal
-                        # - Muy claro: papel (poco probable en botellas)
-                        mean_val = np.mean(hsv[:,:,2])
-                        if mean_val < 60:
-                            material = "Metal"
-                        elif mean_sat < 40:
-                            material = "Vidrio"
-                        elif mean_sat > 100:
-                            material = "Plástico"
-                        else:
-                            material = "Desconocido"
-                    # Línea dividida para cumplir con límite de longitud
-                    label_text = f"Botella ({material}) {conf:.2f}"
-                    if material == "Plástico":
-                        color = (0, 255, 0)
-                    elif material == "Vidrio":
-                        color = (255, 255, 0)
-                    elif material == "Metal":
-                        color = (192, 192, 192)
-                    else:
-                        color = (255, 0, 255)
-                else:
-                    color = (255, 0, 255)
-                    label_text = f"{label} {conf:.2f}"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)  # pylint: disable=no-member
-                cv2.putText(frame, label_text, (x1, y1-10),  # pylint: disable=no-member
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)  # pylint: disable=no-member
-        _, buffer = cv2.imencode('.jpg', frame)  # pylint: disable=no-member
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-    cap.release()
+            continue
+        results = model(frame)
+        annotated_frame = results[0].plot()
+        with frame_lock:
+            latest_frame = annotated_frame
+            if results[0].boxes and len(results[0].boxes) > 0:
+                best_box = max(results[0].boxes, key=lambda b: b.conf)
+                material = results[0].names[int(best_box.cls)]
+                confidence = float(best_box.conf)
+                latest_prediction = {"material": material, "confidence": confidence}
+            else:
+                latest_prediction = {"material": None, "confidence": None}
 
-
-@app.route('/')
-def index():
-    """Página principal de la aplicación."""
-    return render_template('index.html')
-
+def gen_frames():
+    while True:
+        with frame_lock:
+            frame = latest_frame
+        if frame is not None:
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
 @app.route('/video_feed')
 def video_feed():
-    """Endpoint para el streaming de video."""
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/predict')
+def predict():
+    with frame_lock:
+        return jsonify(latest_prediction)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+@app.route('/deposit', methods=['POST'])
+def deposit():
+    data = request.get_json()
+    material = data.get("material")
+    wallet = data.get("wallet")
+
+    if not material or not wallet or material not in MATERIAL_REWARD:
+        return jsonify({"success": False, "error": "Datos inválidos"}), 400
+
+    eco_amount = MATERIAL_REWARD[material]
+
+    # --- DEMO: Simula el hash de transacción ---
+    tx_hash = "0xDEMO" + os.urandom(8).hex()
+
+    # Guarda el depósito en eco_transactions
+    result = supabase_client.table("eco_transactions").insert({
+        "wallet_id": wallet,
+        "material_type": material,
+        "eco_amount": eco_amount,
+        "transaction_hash": tx_hash
+    }).execute()
+
+    return jsonify({
+        "success": True,
+        "material": material,
+        "eco_amount": eco_amount,
+        "transaction_hash": tx_hash,
+        "db_result": result.data
+    })
+
+# Inicia el thread de captura al arrancar el servidor
+if __name__ == "__main__":
+    t = threading.Thread(target=capture_frames, daemon=True)
+    t.start()
+    app.run(host="0.0.0.0", port=5000)

@@ -150,10 +150,11 @@ export default function MaterialDeposit({ wallet, onTransactionAdded }: Material
           <CardDescription className="text-base">
             Simula el depósito de materiales reciclables y gana $EC0 al instante
           </CardDescription>
-          {/* Overlay de la cámara (consumirá el stream MJPEG del backend) */}
-      
+          
         </CardHeader>
         <CardContent>
+          {/* Overlay de la cámara (consumirá el stream MJPEG del backend) */}
+          <CameraOverlay backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL} />
           <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg p-4 mb-6">
             <p className="text-sm text-emerald-800">
               <strong>ℹ️ Simulación de Hardware:</strong> En un punto de recolección real, el hardware identifica automáticamente el material. Aquí puedes simular ese proceso seleccionando el tipo de residuo depositado.

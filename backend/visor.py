@@ -6,9 +6,14 @@ import torch
 from ultralytics.nn.tasks import DetectionModel
 from torch.nn.modules.container import Sequential
 from ultralytics.nn.modules.conv import Conv
+from torch.nn.modules.conv import Conv2d
+from torch.nn.modules.batchnorm import BatchNorm2d
+from torch.nn.modules.activation import SiLU
+from ultralytics.nn.modules.block import C3, C2f  # Solo si existen
 
-# Permitir clases necesarias para cargar modelos YOLO personalizados
-torch.serialization.add_safe_globals([DetectionModel, Sequential, Conv])
+torch.serialization.add_safe_globals([
+    DetectionModel, Sequential, Conv, Conv2d, BatchNorm2d, SiLU, C3, C2f
+])
 
 # ✅ RUTA CORREGIDA
 try:
