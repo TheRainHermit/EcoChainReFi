@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 
 interface CameraOverlayProps {
   backendUrl?: string;
-  walletAddress: string;
+  walletAddress?: string; // <-- ahora opcional
   onDepositSuccess?: (material: string, amount: number) => void;
 }
 
-export default function CameraOverlay({ backendUrl, walletAddress, onDepositSuccess }: CameraOverlayProps) {
+export default function CameraOverlay({ backendUrl, walletAddress = "", onDepositSuccess }: CameraOverlayProps) {
   const src =
     (backendUrl || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000") +
     "/video_feed";
@@ -39,7 +39,7 @@ export default function CameraOverlay({ backendUrl, walletAddress, onDepositSucc
     if (
       prediction.material &&
       prediction.material !== lastDeposited &&
-      walletAddress
+      walletAddress && walletAddress.length > 0 // <-- requiere dirección para procesar depósito
     ) {
       const materialToDeposit = prediction.material;
       const timeout = setTimeout(async () => {
