@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 interface CameraOverlayProps {
   backendUrl?: string;
-  walletAddress: string; // Asegúrate de pasar la dirección del usuario como prop
-  onDepositSuccess?: (material: string, amount: number) => void; // Para mostrar aviso y actualizar balance
+  walletAddress: string;
+  onDepositSuccess?: (material: string, amount: number) => void;
 }
 
 export default function CameraOverlay({ backendUrl, walletAddress, onDepositSuccess }: CameraOverlayProps) {
@@ -30,22 +30,19 @@ export default function CameraOverlay({ backendUrl, walletAddress, onDepositSucc
       } catch (err) {
         setPrediction({ material: null, confidence: null });
       }
-    }, 1000); // consulta cada segundo
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [backendUrl]);
 
   useEffect(() => {
-    // Detecta cambio de material y evita múltiples depósitos seguidos
     if (
       prediction.material &&
       prediction.material !== lastDeposited &&
       walletAddress
     ) {
-      // Capturamos el material actual en una constante para que no sea `null` dentro del timeout
       const materialToDeposit = prediction.material;
       const timeout = setTimeout(async () => {
-        // Llama a la API /deposit
         const res = await fetch(
           (backendUrl || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000") + "/deposit",
           {
@@ -61,23 +58,27 @@ export default function CameraOverlay({ backendUrl, walletAddress, onDepositSucc
         if (data.success) {
           setLastDeposited(materialToDeposit);
           if (onDepositSuccess) {
-            // materialToDeposit es string aquí
             onDepositSuccess(materialToDeposit, data.amount);
           }
         }
-      }, 3000); // delay de 3 segundos
+      }, 3000);
 
       return () => clearTimeout(timeout);
     }
   }, [prediction.material, walletAddress, lastDeposited, backendUrl, onDepositSuccess]);
 
+  // Seguridad de tipos: calcular fuera del JSX para evitar warnings de TS sobre null
+  const detectedMaterial = prediction.material;
+  const confidencePct = prediction.confidence != null ? (prediction.confidence * 100).toFixed(1) : null;
+
   return (
     <div className="w-full max-w-[720px] mx-auto my-4 rounded-xl overflow-hidden border border-emerald-100 shadow-lg bg-white">
       <img src={src} alt="Camera feed" className="w-full h-[720px] object-cover" />
       <div className="p-2 text-center">
-        {prediction.material ? (
+        {detectedMaterial ? (
           <span className="text-emerald-700 font-semibold">
-            Material detectado: {prediction.material} ({(prediction.confidence * 100).toFixed(1)}%)
+            Material detectado: {detectedMaterial}
+            {confidencePct ? ` (${confidencePct}%)` : null}
           </span>
         ) : (
           <span className="text-gray-500">No se detecta material</span>
