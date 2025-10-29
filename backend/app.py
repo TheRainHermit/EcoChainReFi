@@ -12,10 +12,9 @@ from torch.nn.modules.activation import SiLU
 from ultralytics.nn.modules.block import C3, C2f
 import threading
 import os
-# from web3 import Web3  # Comentado para demo sin transacciones reales
+from web3 import Web3
 import supabase
 from dotenv import load_dotenv
-
 load_dotenv()
 
 # Permitir clases necesarias para cargar el modelo YOLO personalizado
@@ -54,50 +53,38 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Usa variable de entorno
 supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Configuración de Web3 y contrato EC0 ---
-# NO TENEMOS GAS SUFICIENTE PARA HACER LAS TRANSACCIONES - WE DON'T HAVE ENOUGH GAS TO MAKE THE TRANSACTIONS
-# POR LO TANTO, ESTA SECCIÓN ESTÁ COMENTADA Y SIMULAMOS LAS TRANSACCIONES EN LA RUTA /deposit
-# THEREFORE, THIS SECTION IS COMMENTED OUT AND WE SIMULATE THE TRANSACTIONS ON THE /deposit PATH
-# Si deseas habilitar las transacciones reales, asegúrate de tener fondos suficientes y descomenta esta sección.
-# If you want to enable real transactions, make sure you have sufficient funds and uncomment this section.
-# ------------------------------------------------------------------------------------------------------------
-# WEB3_PROVIDER = "https://mainnet.base.org"
-# ECOCOIN_CONTRACT_ADDRESS = "0x256492d87947589e589FE58805AC1D36E5488b07"
-# ECOCOIN_ABI = [
-#     {
-#         "constant": False,
-#         "inputs": [
-#             {"name": "to", "type": "address"},
-#             {"name": "amount", "type": "uint256"}
-#         ],
-#         "name": "transfer",
-#         "outputs": [{"name": "", "type": "bool"}],
-#         "type": "function"
-#     }
-# ]
-# PRIVATE_KEY = os.getenv("BACKEND_PRIVATE_KEY")  # Usa variable de entorno segura
-# w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
-# ecocoin_contract = w3.eth.contract(address=ECOCOIN_CONTRACT_ADDRESS, abi=ECOCOIN_ABI)
-# backend_wallet = w3.eth.account.from_key(PRIVATE_KEY)
+WEB3_PROVIDER = "https://mainnet.base.org"  # O tu nodo privado
+ECOCOIN_CONTRACT_ADDRESS = "0x256492d87947589e589FE58805AC1D36E5488b07"
+ECOCOIN_ABI = [
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "to", "type": "address"},
+            {"name": "amount", "type": "uint256"}
+        ],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function"
+    }
+]
+PRIVATE_KEY = os.getenv("BACKEND_PRIVATE_KEY")  # Usa variable de entorno segura
 
-# def send_ec0(to_address, amount):
-#     amount_wei = int(amount * (10 ** 18))
-#     nonce = w3.eth.get_transaction_count(backend_wallet.address)
-#     # Estimar gas
-#     try:
-#         estimated_gas = ecocoin_contract.functions.transfer(to_address, amount_wei).estimate_gas({
-#             "from": backend_wallet.address
-#         })
-#     except Exception as e:
-#         raise Exception(f"Error al estimar gas: {e}")
-#     tx = ecocoin_contract.functions.transfer(to_address, amount_wei).build_transaction({
-#         "from": backend_wallet.address,
-#         "nonce": nonce,
-#         "gas": estimated_gas,
-#         "gasPrice": w3.to_wei("5", "gwei"),
-#     })
-#     signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-#     tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-#     return tx_hash.hex()
+w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
+ecocoin_contract = w3.eth.contract(address=ECOCOIN_CONTRACT_ADDRESS, abi=ECOCOIN_ABI)
+backend_wallet = w3.eth.account.from_key(PRIVATE_KEY)
+
+def send_ec0(to_address, amount):
+    amount_wei = int(amount * (10 ** 18))
+    nonce = w3.eth.get_transaction_count(backend_wallet.address)
+    tx = ecocoin_contract.functions.transfer(to_address, amount_wei).build_transaction({
+        "from": backend_wallet.address,
+        "nonce": nonce,
+        "gas": 100000,
+        "gasPrice": w3.to_wei("5", "gwei"),
+    })
+    signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+    return tx_hash.hex()
 
 def capture_frames():
     global latest_frame, latest_prediction
@@ -147,8 +134,11 @@ def deposit():
 
     eco_amount = MATERIAL_REWARD[material]
 
-    # --- DEMO: Simula el hash de transacción ---
-    tx_hash = "0xDEMO" + os.urandom(8).hex()
+    # Realiza la transacción de EC0 y obtiene el hash
+    try:
+        tx_hash = send_ec0(wallet, eco_amount)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
     # Guarda el depósito en eco_transactions
     result = supabase_client.table("eco_transactions").insert({

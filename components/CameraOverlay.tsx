@@ -42,6 +42,8 @@ export default function CameraOverlay({ backendUrl, walletAddress, onDepositSucc
       prediction.material !== lastDeposited &&
       walletAddress
     ) {
+      // Capturamos el material actual en una constante para que no sea `null` dentro del timeout
+      const materialToDeposit = prediction.material;
       const timeout = setTimeout(async () => {
         // Llama a la API /deposit
         const res = await fetch(
@@ -50,16 +52,17 @@ export default function CameraOverlay({ backendUrl, walletAddress, onDepositSucc
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              material: prediction.material,
+              material: materialToDeposit,
               wallet: walletAddress,
             }),
           }
         );
         const data = await res.json();
         if (data.success) {
-          setLastDeposited(prediction.material);
+          setLastDeposited(materialToDeposit);
           if (onDepositSuccess) {
-            onDepositSuccess(prediction.material, data.amount);
+            // materialToDeposit es string aquí
+            onDepositSuccess(materialToDeposit, data.amount);
           }
         }
       }, 3000); // delay de 3 segundos
