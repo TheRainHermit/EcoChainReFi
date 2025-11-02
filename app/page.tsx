@@ -6,11 +6,16 @@ import WalletConnect from "@/components/WalletConnect";
 import Dashboard from "@/components/Dashboard";
 import { Toaster } from "@/components/ui/toaster";
 import { useAccount } from "wagmi";
+import { sdk } from '@farcaster/miniapp-sdk';
 
 export default function Home() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const { isConnected } = useAccount();
+
+  useEffect(() => {
+    sdk.actions.ready();
+  }, []);
 
   useEffect(() => {
     checkExistingWallet();
