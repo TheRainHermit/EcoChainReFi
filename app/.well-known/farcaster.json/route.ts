@@ -13,7 +13,7 @@ return Response.json({
     "signature": ""
   },
   "baseBuilder": {
-    "ownerAddress": "0x1eEEEE08C989155cA0AA46A3b37d611622e94c1d"
+    "ownerAddress": "0xaD1559C2A85fed3e749F1CD0C7dd19945F6d5Ea7"
   },
   "miniapp": {
     "version": "1",
