@@ -24,7 +24,7 @@ return Response.json({
     "splashBackgroundColor": "#000000",
     "webhookUrl": "https://ex.co/api/webhook",
     "subtitle": "Recycle, earn, win",
-    "description": "Recycle and earn EcoCoins ($EC0) and NFTs.",
+    "description": "Recycle and earn EcoCoins and NFTs.",
     "screenshotUrls": [
       "https://ex.co/s1.png",
       "https://ex.co/s2.png",
